@@ -276,6 +276,32 @@ describe("cron agent setup watchdog", () => {
     expect(watchdog.observedLaneWait()).toBe(false);
   });
 
+  it("pauses the setup deadline during session-preparation writes without lane attribution", async () => {
+    const { triggerTimeout, watchdog, advance } = makeWatchdog(2);
+    watchdog.notePreparationWait();
+    await advance(37_000);
+    expect(triggerTimeout).not.toHaveBeenCalled();
+    expect(watchdog.observedLaneWait()).toBe(false);
+    watchdog.notePreparationResumed();
+    await vi.advanceTimersByTimeAsync(CRON_AGENT_SETUP_WATCHDOG_MS - 1);
+    expect(triggerTimeout).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(triggerTimeout).toHaveBeenCalledTimes(1);
+    expect(watchdog.observedLaneWait()).toBe(false);
+  });
+
+  it("bounds the session-preparation pause by the setup budget", async () => {
+    const { triggerTimeout, watchdog } = makeWatchdog(2);
+    watchdog.notePreparationWait();
+    await vi.advanceTimersByTimeAsync(CRON_AGENT_SETUP_WATCHDOG_MS - 1);
+    expect(triggerTimeout).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(triggerTimeout).toHaveBeenCalledTimes(1);
+    watchdog.notePreparationResumed();
+    await vi.advanceTimersByTimeAsync(CRON_AGENT_SETUP_WATCHDOG_MS);
+    expect(triggerTimeout).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the fallback watchdog armed across later setup progress", async () => {
     const { runner, phase, fallback, advance } = makeWatchdog();
     runner();

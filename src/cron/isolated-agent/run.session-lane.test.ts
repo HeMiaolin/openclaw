@@ -176,6 +176,36 @@ describe("session-bound cron lane admission", () => {
     }
   });
 
+  it("reports the session-row write as a preparation pause", async ({ signal }) => {
+    const { target } = await seedSession();
+    const preparationSignals: Array<{
+      waiting?: boolean;
+      stage?: "session-preparation";
+    }> = [];
+    const run = startCron(target, {
+      abortSignal: signal,
+      onLaneWait: (info) => {
+        if (info?.stage === "session-preparation") {
+          preparationSignals.push(info);
+        }
+      },
+    });
+    await expect(withinTest(run, signal)).resolves.toMatchObject({ status: "ok" });
+    expect(preparationSignals).toEqual(
+      expect.arrayContaining([
+        { waiting: true, stage: "session-preparation" },
+        { waiting: false, stage: "session-preparation" },
+      ]),
+    );
+    // The first pair covers turn admission; the write must add its own pair so the
+    // setup watchdog can pause while the session row is persisted.
+    expect(preparationSignals.length).toBeGreaterThanOrEqual(4);
+    expect(preparationSignals.slice(-2)).toEqual([
+      { waiting: true, stage: "session-preparation" },
+      { waiting: false, stage: "session-preparation" },
+    ]);
+  });
+
   it("serializes cron turns through model settlement", async ({ signal }) => {
     const { target } = await seedSession();
     const firstStarted = createDeferred();

@@ -57,10 +57,12 @@ export function createCronAgentWatchdog(params: {
   let state: CronAgentWatchdogState = params.deferUntilRunner ? "waiting_for_runner" : "executing";
   let timeoutId: NodeJS.Timeout | undefined;
   let setupTimeoutId: NodeJS.Timeout | undefined;
+  let preparationTimeoutId: NodeJS.Timeout | undefined;
   let preExecutionTimeoutId: NodeJS.Timeout | undefined;
   let activeExecution: CronAgentExecutionStarted | undefined;
   let observedLaneWait = false;
   let waitingForLane = false;
+  let waitingForPreparation = false;
 
   const setTimedOut = (reason: string) => {
     if (state === "timed_out" || state === "disposed") {
@@ -84,13 +86,25 @@ export function createCronAgentWatchdog(params: {
     clearTimeout(setupTimeoutId);
     setupTimeoutId = undefined;
   };
+  const clearPreparationTimeout = () => {
+    if (!preparationTimeoutId) {
+      return;
+    }
+    clearTimeout(preparationTimeoutId);
+    preparationTimeoutId = undefined;
+  };
   // Queue contention is not runner setup; admission must begin a fresh setup budget.
   const startSetupTimeout = () => {
-    if (setupTimeoutId || state !== "waiting_for_runner" || waitingForLane) {
+    if (
+      setupTimeoutId ||
+      state !== "waiting_for_runner" ||
+      waitingForLane ||
+      waitingForPreparation
+    ) {
       return;
     }
     setupTimeoutId = setTimeout(() => {
-      if (state === "waiting_for_runner" && !waitingForLane) {
+      if (state === "waiting_for_runner" && !waitingForLane && !waitingForPreparation) {
         setTimedOut(
           params.executionKind === "command"
             ? `${timeoutErrorMessage()} (command setup before runner start)`
@@ -158,11 +172,36 @@ export function createCronAgentWatchdog(params: {
         startSetupTimeout();
       }
     },
+    // Session-preparation storage writes can outlast a clean setup budget on a slow
+    // volume. Bound the pause by the same setup budget so a hung write still times out,
+    // and keep lane-wait attribution untouched.
+    notePreparationWait: () => {
+      if (state !== "waiting_for_runner") {
+        return;
+      }
+      waitingForPreparation = true;
+      clearSetupTimeout();
+      clearPreparationTimeout();
+      preparationTimeoutId = setTimeout(() => {
+        if (state === "waiting_for_runner" && !waitingForLane && waitingForPreparation) {
+          setTimedOut(setupTimeoutErrorMessage(activeExecution));
+        }
+      }, CRON_AGENT_SETUP_WATCHDOG_MS);
+    },
+    notePreparationResumed: () => {
+      if (state === "waiting_for_runner") {
+        waitingForPreparation = false;
+        clearPreparationTimeout();
+        startSetupTimeout();
+      }
+    },
     noteRunnerStarted: (info?: CronAgentExecutionStarted) => {
       if (state === "disposed" || state === "timed_out") {
         return;
       }
       clearSetupTimeout();
+      clearPreparationTimeout();
+      waitingForPreparation = false;
       startTimeout();
       if (params.executionKind === "command") {
         state = "executing";
@@ -193,6 +232,7 @@ export function createCronAgentWatchdog(params: {
         clearTimeout(timeoutId);
       }
       clearSetupTimeout();
+      clearPreparationTimeout();
       clearPreExecutionTimeout();
     },
   };

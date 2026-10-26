@@ -369,7 +369,15 @@ async function executeJobCoreWithTimeoutUnfinalized(
         untimedExecution = { ...untimedExecution, ...info };
       }
     };
-    const noteLaneState = (info?: { waiting?: boolean }) => {
+    const noteLaneState = (info?: { waiting?: boolean; stage?: "session-preparation" }) => {
+      if (info?.stage === "session-preparation") {
+        if (info.waiting === false) {
+          watchdog?.notePreparationResumed();
+        } else {
+          watchdog?.notePreparationWait();
+        }
+        return;
+      }
       if (info?.waiting === false) {
         watchdog?.noteLaneAdmitted();
         return;

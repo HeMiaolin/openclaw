@@ -493,10 +493,13 @@ export function enqueueSessionEventForHost(
       if (!target.sessionId && !options.createIfMissing) {
         throw new Error("Session event origin is missing; start fresh authorized work instead");
       }
+      const notePreparationWait = (waiting: boolean) =>
+        options.scheduledAutomation?.onLaneWait?.({ waiting, stage: "session-preparation" });
+      notePreparationWait(true);
       generationLease = await prepareSessionEventTargetForHost(target, {
         createIfMissing: options.createIfMissing,
         assertAcceptanceCurrent: assertOwnerCurrent,
-      });
+      }).finally(() => notePreparationWait(false));
       settings ??= target.settings;
       route ??= structuredClone(target.deliveryContext);
       await prepareCurrent();
