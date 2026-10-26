@@ -143,7 +143,10 @@ export type ScheduledSessionAutomation = {
   /** Retain an on-exit occurrence until existing foreground work settles. */
   waitForIdle?: (signal?: AbortSignal, operation?: ReplyOperationObservation) => Promise<void>;
   onStarted?: () => void;
-  onLaneWait?: (info: { waiting: boolean; stage?: "session-preparation" }) => void;
+  onLaneWait?: (info: {
+    waiting: boolean;
+    stage?: "session-preparation" | "session-persistence";
+  }) => void;
   onExecutionStarted?: (info: {
     runId: string;
     sessionId?: string;

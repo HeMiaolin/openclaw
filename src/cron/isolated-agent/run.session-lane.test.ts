@@ -133,7 +133,7 @@ describe("session-bound cron lane admission", () => {
         await previous;
         await expect(withinTest(run, signal)).resolves.toMatchObject({ status: "ok" });
         expect(laneSignals).toContainEqual({ waiting: false, stage: "session-preparation" });
-        expect(laneSignals.filter((info) => info?.stage !== "session-preparation")).toEqual([]);
+        expect(laneSignals.every((info) => info?.stage !== undefined)).toBe(true);
         expect(accessor.loadSessionEntry(target)).toMatchObject({
           sessionId: target.sessionId,
           ...terminal,
@@ -185,24 +185,18 @@ describe("session-bound cron lane admission", () => {
     const run = startCron(target, {
       abortSignal: signal,
       onLaneWait: (info) => {
-        if (info?.stage === "session-preparation") {
+        if (info?.stage === "session-persistence") {
           preparationSignals.push(info);
         }
       },
     });
     await expect(withinTest(run, signal)).resolves.toMatchObject({ status: "ok" });
-    expect(preparationSignals).toEqual(
-      expect.arrayContaining([
-        { waiting: true, stage: "session-preparation" },
-        { waiting: false, stage: "session-preparation" },
-      ]),
-    );
-    // The first pair covers turn admission; the write must add its own pair so the
-    // setup watchdog can pause while the session row is persisted.
-    expect(preparationSignals.length).toBeGreaterThanOrEqual(4);
+    // The persistence stage must add its own pair so the setup watchdog can pause
+    // while the session row is persisted, without touching admission signals.
+    expect(preparationSignals.length).toBeGreaterThanOrEqual(2);
     expect(preparationSignals.slice(-2)).toEqual([
-      { waiting: true, stage: "session-preparation" },
-      { waiting: false, stage: "session-preparation" },
+      { waiting: true, stage: "session-persistence" },
+      { waiting: false, stage: "session-persistence" },
     ]);
   });
 

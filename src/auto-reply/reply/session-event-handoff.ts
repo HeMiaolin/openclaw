@@ -494,7 +494,7 @@ export function enqueueSessionEventForHost(
         throw new Error("Session event origin is missing; start fresh authorized work instead");
       }
       const notePreparationWait = (waiting: boolean) =>
-        options.scheduledAutomation?.onLaneWait?.({ waiting, stage: "session-preparation" });
+        options.scheduledAutomation?.onLaneWait?.({ waiting, stage: "session-persistence" });
       notePreparationWait(true);
       generationLease = await prepareSessionEventTargetForHost(target, {
         createIfMissing: options.createIfMissing,

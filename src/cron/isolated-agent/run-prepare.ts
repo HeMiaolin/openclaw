@@ -567,7 +567,7 @@ async function resolveCronRunPreparation(params: CronRunPreparationParams) {
       cronSession.sessionEntry.systemSent = true;
       let preRunSessionPersisted = false;
       const notePreparationWait = (waiting: boolean) =>
-        input.onLaneWait?.({ waiting, stage: "session-preparation" });
+        input.onLaneWait?.({ waiting, stage: "session-persistence" });
       notePreparationWait(true);
       try {
         await persistSessionEntry();

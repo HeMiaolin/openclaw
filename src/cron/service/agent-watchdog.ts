@@ -57,12 +57,12 @@ export function createCronAgentWatchdog(params: {
   let state: CronAgentWatchdogState = params.deferUntilRunner ? "waiting_for_runner" : "executing";
   let timeoutId: NodeJS.Timeout | undefined;
   let setupTimeoutId: NodeJS.Timeout | undefined;
-  let preparationTimeoutId: NodeJS.Timeout | undefined;
+  let persistenceTimeoutId: NodeJS.Timeout | undefined;
   let preExecutionTimeoutId: NodeJS.Timeout | undefined;
   let activeExecution: CronAgentExecutionStarted | undefined;
   let observedLaneWait = false;
   let waitingForLane = false;
-  let waitingForPreparation = false;
+  let waitingForPersistence = false;
 
   const setTimedOut = (reason: string) => {
     if (state === "timed_out" || state === "disposed") {
@@ -86,12 +86,12 @@ export function createCronAgentWatchdog(params: {
     clearTimeout(setupTimeoutId);
     setupTimeoutId = undefined;
   };
-  const clearPreparationTimeout = () => {
-    if (!preparationTimeoutId) {
+  const clearPersistenceTimeout = () => {
+    if (!persistenceTimeoutId) {
       return;
     }
-    clearTimeout(preparationTimeoutId);
-    preparationTimeoutId = undefined;
+    clearTimeout(persistenceTimeoutId);
+    persistenceTimeoutId = undefined;
   };
   // Queue contention is not runner setup; admission must begin a fresh setup budget.
   const startSetupTimeout = () => {
@@ -99,12 +99,12 @@ export function createCronAgentWatchdog(params: {
       setupTimeoutId ||
       state !== "waiting_for_runner" ||
       waitingForLane ||
-      waitingForPreparation
+      waitingForPersistence
     ) {
       return;
     }
     setupTimeoutId = setTimeout(() => {
-      if (state === "waiting_for_runner" && !waitingForLane && !waitingForPreparation) {
+      if (state === "waiting_for_runner" && !waitingForLane && !waitingForPersistence) {
         setTimedOut(
           params.executionKind === "command"
             ? `${timeoutErrorMessage()} (command setup before runner start)`
@@ -175,23 +175,23 @@ export function createCronAgentWatchdog(params: {
     // Session-preparation storage writes can outlast a clean setup budget on a slow
     // volume. Bound the pause by the same setup budget so a hung write still times out,
     // and keep lane-wait attribution untouched.
-    notePreparationWait: () => {
+    notePersistenceWait: () => {
       if (state !== "waiting_for_runner") {
         return;
       }
-      waitingForPreparation = true;
+      waitingForPersistence = true;
       clearSetupTimeout();
-      clearPreparationTimeout();
-      preparationTimeoutId = setTimeout(() => {
-        if (state === "waiting_for_runner" && !waitingForLane && waitingForPreparation) {
+      clearPersistenceTimeout();
+      persistenceTimeoutId = setTimeout(() => {
+        if (state === "waiting_for_runner" && !waitingForLane && waitingForPersistence) {
           setTimedOut(setupTimeoutErrorMessage(activeExecution));
         }
       }, CRON_AGENT_SETUP_WATCHDOG_MS);
     },
-    notePreparationResumed: () => {
+    notePersistenceResumed: () => {
       if (state === "waiting_for_runner") {
-        waitingForPreparation = false;
-        clearPreparationTimeout();
+        waitingForPersistence = false;
+        clearPersistenceTimeout();
         startSetupTimeout();
       }
     },
@@ -200,8 +200,8 @@ export function createCronAgentWatchdog(params: {
         return;
       }
       clearSetupTimeout();
-      clearPreparationTimeout();
-      waitingForPreparation = false;
+      clearPersistenceTimeout();
+      waitingForPersistence = false;
       startTimeout();
       if (params.executionKind === "command") {
         state = "executing";
@@ -232,10 +232,42 @@ export function createCronAgentWatchdog(params: {
         clearTimeout(timeoutId);
       }
       clearSetupTimeout();
-      clearPreparationTimeout();
+      clearPersistenceTimeout();
       clearPreExecutionTimeout();
     },
   };
+}
+
+export type CronAgentWatchdog = ReturnType<typeof createCronAgentWatchdog>;
+export type CronWatchdogWaitSignal = {
+  waiting?: boolean;
+  stage?: "session-preparation" | "session-persistence";
+};
+
+/**
+ * Controller-admission waits keep the setup watchdog paused indefinitely; persistence
+ * waits get a bounded allowance so a hung storage write still times out.
+ */
+export function applyCronWatchdogWaitSignal(
+  watchdog: CronAgentWatchdog | undefined,
+  info?: CronWatchdogWaitSignal,
+): void {
+  if (!watchdog) {
+    return;
+  }
+  if (info?.stage === "session-persistence") {
+    if (info.waiting === false) {
+      watchdog.notePersistenceResumed();
+    } else {
+      watchdog.notePersistenceWait();
+    }
+    return;
+  }
+  if (info?.waiting === false) {
+    watchdog.noteLaneAdmitted();
+    return;
+  }
+  watchdog.noteLaneWait();
 }
 
 /** Joins timeout cleanup and command settlement without wedging the cron lane. */
