@@ -180,7 +180,7 @@ describe("session-bound cron lane admission", () => {
     const { target } = await seedSession();
     const preparationSignals: Array<{
       waiting?: boolean;
-      stage?: "session-preparation";
+      stage?: "session-preparation" | "session-persistence";
     }> = [];
     const run = startCron(target, {
       abortSignal: signal,
