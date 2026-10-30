@@ -4,7 +4,6 @@
  */
 import { cleanup, render } from "@solidjs/testing-library";
 import { afterEach, expect, it, vi } from "vitest";
-import type { ApplicationRuntime } from "./bootstrap.ts";
 
 const scheduleStaleChunkReload = vi.hoisted(() => vi.fn(async () => true));
 
@@ -14,25 +13,28 @@ vi.mock("./stale-chunk-reload.ts", async () => {
   return { ...actual, scheduleStaleChunkReload };
 });
 
-// The lazy shell import resolves, then fails the way a stale module response does.
-vi.mock("./app-host.tsx", () => ({
-  OpenClawShell: () => {
-    throw new Error("Failed to fetch dynamically imported module: /src/app/app-host.tsx");
-  },
-}));
-
-const { ShellLoader } = await import("./app-shell-loader.tsx");
+const { ShellLoadError } = await import("./app-shell-loader.tsx");
 
 afterEach(() => {
   cleanup();
   document.body.replaceChildren();
 });
 
-it("starts the guarded shell recovery without a manual retry", async () => {
+const staleShellError = () =>
+  new Error("Failed to fetch dynamically imported module: /src/app/app-host.tsx");
+
+it("starts the guarded shell recovery without a manual retry", () => {
   scheduleStaleChunkReload.mockClear();
 
-  render(() => <ShellLoader runtime={{} as ApplicationRuntime} fallback={<span />} />);
+  render(() => <ShellLoadError error={staleShellError()} reset={() => {}} />);
 
-  await expect.poll(() => scheduleStaleChunkReload.mock.calls.length).toBeGreaterThan(0);
-  expect(scheduleStaleChunkReload).toHaveBeenCalledWith({ canReload: expect.any(Function) });
+  expect(scheduleStaleChunkReload).toHaveBeenCalled();
+});
+
+it("leaves an unrelated shell failure on the manual surface", () => {
+  scheduleStaleChunkReload.mockClear();
+
+  render(() => <ShellLoadError error={new Error("shell failed")} reset={() => {}} />);
+
+  expect(scheduleStaleChunkReload).not.toHaveBeenCalled();
 });

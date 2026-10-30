@@ -28,19 +28,18 @@ export function ShellLoader(props: ShellLoaderProps): SolidJSX.Element {
   );
 }
 
-function ShellLoadError(props: { error: unknown; reset: () => void }): SolidJSX.Element {
+export function ShellLoadError(props: { error: unknown; reset: () => void }): SolidJSX.Element {
   let active = true;
   const stale = () => isStaleChunkImportError(props.error);
-  onSettled(() => () => {
-    active = false;
-  });
-  // A recognized shell-download failure joins the shared guarded recovery instead of
-  // waiting for a manual Reload. Reachability, the once-per-build bound and draft
-  // protection stay owned there, so a refused attempt still lands on this surface.
   onSettled(() => {
+    // A recognized shell-download failure joins the shared guarded recovery instead of
+    // waiting for a manual Reload; a refused attempt still lands on this surface.
     if (stale()) {
-      void scheduleStaleChunkReload({ canReload: () => active });
+      void scheduleStaleChunkReload();
     }
+    return () => {
+      active = false;
+    };
   });
   const retry = async () => {
     const reloading =
