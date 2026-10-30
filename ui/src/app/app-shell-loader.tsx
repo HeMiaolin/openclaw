@@ -1,5 +1,5 @@
 import type { JSX as SolidJSX } from "@solidjs/web";
-import { Errored, Loading, Show, lazy, onSettled } from "solid-js";
+import { Errored, Loading, lazy, onSettled } from "solid-js";
 import { LazyViewError } from "../components/solid/lazy-view-error.tsx";
 import type { OpenClawShellProps } from "./app-host.tsx";
 import {
@@ -30,10 +30,18 @@ export function ShellLoader(props: ShellLoaderProps): SolidJSX.Element {
 
 function ShellLoadError(props: { error: unknown; reset: () => void }): SolidJSX.Element {
   let active = true;
+  const stale = () => isStaleChunkImportError(props.error);
   onSettled(() => () => {
     active = false;
   });
-  const stale = () => isStaleChunkImportError(props.error);
+  // A recognized shell-download failure joins the shared guarded recovery instead of
+  // waiting for a manual Reload. Reachability, the once-per-build bound and draft
+  // protection stay owned there, so a refused attempt still lands on this surface.
+  onSettled(() => {
+    if (stale()) {
+      void scheduleStaleChunkReload({ canReload: () => active });
+    }
+  });
   const retry = async () => {
     const reloading =
       stale() && (await retryStaleChunkReloadWhenReachable({ canReload: () => active }));
@@ -43,17 +51,6 @@ function ShellLoadError(props: { error: unknown; reset: () => void }): SolidJSX.
   };
   return (
     <openclaw-route-fragment style={{ display: "contents" }}>
-      <Show when={stale()}>
-        {() => {
-          // A recognized shell-download failure joins the shared guarded recovery instead of
-          // waiting for a manual Reload; reachability, loop bounds and draft protection stay
-          // owned by that path, so a failed attempt still lands on this error surface.
-          onSettled(() => {
-            void scheduleStaleChunkReload({ canReload: () => active });
-          });
-          return <></>;
-        }}
-      </Show>
       <LazyViewError
         error={props.error}
         stale={stale()}

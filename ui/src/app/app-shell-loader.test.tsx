@@ -4,7 +4,7 @@
  */
 import { cleanup, render } from "@solidjs/testing-library";
 import { afterEach, expect, it, vi } from "vitest";
-import type { ApplicationRuntime } from "../runtime/application-runtime.ts";
+import type { ApplicationRuntime } from "./bootstrap.ts";
 
 const scheduleStaleChunkReload = vi.hoisted(() => vi.fn(async () => true));
 
