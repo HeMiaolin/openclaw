@@ -247,6 +247,18 @@ function resolveSessionFileCandidates(params: {
   });
 }
 
+/**
+ * Case-insensitive comparison text for path search. Lowercasing applies Unicode's
+ * Final_Sigma rule, so a capital sigma at a word end folds to final sigma while the
+ * query folds to ordinary sigma; both sides must agree on one form.
+ */
+function foldSearchText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFC")
+    .replace(/\u03C2/gu, "\u03C3");
+}
+
 export async function listSessionWorkspaceFiles(
   params: LoadedSessionFiles & {
     path?: string;
@@ -294,7 +306,7 @@ export async function listSessionWorkspaceFiles(
     if (search) {
       const entries: SessionFileBrowserEntry[] = [];
       // Normalize comparison text only; on-disk filenames stay original.
-      const query = search.toLowerCase().normalize("NFC");
+      const query = foldSearchText(search);
       let visitedEntries = 0;
       let truncated = false;
       const shouldStop = (): boolean => {
@@ -318,7 +330,7 @@ export async function listSessionWorkspaceFiles(
           }
           visitedEntries += 1;
           const browserPath = dir ? `${dir}/${dirent.name}` : dirent.name;
-          if (browserPath.toLowerCase().normalize("NFC").includes(query)) {
+          if (foldSearchText(browserPath).includes(query)) {
             const entry = toWorkspaceBrowserEntry(browserPath, dirent, relevance);
             if (entry) {
               entries.push(entry);
