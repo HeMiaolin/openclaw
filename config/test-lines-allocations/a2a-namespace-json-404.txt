@@ -1,0 +1,3 @@
+# Gateway control-ui regression suite ported onto #193102 from #193128.
+# Credit matches this branch's added test lines (gateway-control-ui.test.ts).
+114
