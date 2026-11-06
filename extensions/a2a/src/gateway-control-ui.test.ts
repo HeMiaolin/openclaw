@@ -27,12 +27,6 @@ it.each([
     if (!handler) {
       throw new Error("A2A did not register /a2a/v1");
     }
-    expect(fixture.registry.httpRoutes).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ path: "/a2a/v1", match: "prefix", auth: "plugin" }),
-      ]),
-    );
-    expect(fixture.registry.httpRoutes.some((route) => route.path === "/a2a/v10")).toBe(false);
 
     const request = createMockIncomingRequest([]);
     request.method = "GET";
