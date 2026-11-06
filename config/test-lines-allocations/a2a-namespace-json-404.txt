@@ -1,3 +1,4 @@
-# Gateway control-ui regression suite ported onto #193102 from #193128.
-# Credit matches this branch's added test lines (gateway-control-ui.test.ts).
-114
+# Gateway control-ui regression for #193102.
+# Core server-http.a2a-namespace.test.ts plus the A2A Accept table.
+# Credit matches added test lines versus the PR base.
+217
